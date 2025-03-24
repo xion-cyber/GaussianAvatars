@@ -15,14 +15,13 @@ import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
 class Camera(nn.Module):
-    def __init__(self, colmap_id, R, T, FoVx, FoVy, bg, image_width, image, image_height, image_path,
-                 image_name, uid, trans=np.array([0.0, 0.0, 0.0]), scale=1.0, 
+    def __init__(self, R, T, FoVx, FoVy, image_width, image, image_height, image_path,
+                 image_name, uid, bg=np.array([0.0, 0.0, 0.0]), trans=np.array([0.0, 0.0, 0.0]), scale=1.0,
                  timestep=None, data_device = "cuda"
                  ):
         super(Camera, self).__init__()
 
         self.uid = uid
-        self.colmap_id = colmap_id
         self.R = R
         self.T = T
         self.FoVx = FoVx

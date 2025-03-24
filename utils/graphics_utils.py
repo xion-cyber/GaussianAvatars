@@ -13,6 +13,44 @@ import torch
 import math
 import numpy as np
 from typing import NamedTuple
+from plyfile import PlyData
+
+class ClothMesh(NamedTuple):
+    vertices: np.array
+    colors: np.array # normalized color 0~1
+    faces: np.array
+
+class SmplxMesh(NamedTuple):
+    vertices: np.array
+    faces: np.array
+
+class ClothedSmplxMesh(NamedTuple):
+    vertices: np.array
+    faces: np.array
+    colors: np.array
+    centers: np.array
+    center_colors: np.array
+    areas: np.array
+    starts: list[int]
+    ends: list[int]
+
+def read_ply_mesh(ply_path, type='cloth'):
+    data = PlyData.read(ply_path)
+    vertices = np.vstack([data['vertex']['x'], data['vertex']['y'], data['vertex']['z']]).T
+    faces = np.vstack(data['face']['vertex_indices'])
+    if type == 'cloth':
+        colors = np.vstack([
+            data['vertex']['red'],
+            data['vertex']['green'],
+            data['vertex']['blue'],
+            data['vertex']['alpha'],
+        ]).T
+        mesh = ClothMesh(vertices=vertices, colors=colors, faces=faces)
+    elif type == 'smplx':
+        mesh = SmplxMesh(vertices=vertices, faces=faces)
+    else:
+        raise TypeError
+    return mesh
 
 class BasicPointCloud(NamedTuple):
     points : np.array

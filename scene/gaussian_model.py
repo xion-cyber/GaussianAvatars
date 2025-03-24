@@ -20,7 +20,7 @@ from plyfile import PlyData, PlyElement
 # from pytorch3d.transforms import quaternion_multiply
 from roma import quat_product, quat_xyzw_to_wxyz, quat_wxyz_to_xyzw
 from utils.sh_utils import RGB2SH
-from simple_knn._C import distCUDA2
+# from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
@@ -61,16 +61,21 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
-        # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary
+        # rights in and to the following code lines and related documentation. Any commercial use, reproduction,
+        # disclosure or distribution of these code lines and related documentation without an express license agreement
+        # from Toyota Motor Europe NV/SA is strictly prohibited.
         # for binding GaussianModel to a mesh
         self.face_center = None
         self.face_scaling = None
         self.face_orien_mat = None
         self.face_orien_quat = None
+
         self.binding = None  # gaussian index to face index
         self.binding_counter = None  # number of points bound to each face
         self.timestep = None  # the current timestep
         self.num_timesteps = 1  # required by viewers
+        self.init_position = None
 
     def capture(self):
         return (
@@ -112,42 +117,45 @@ class GaussianModel:
 
     @property
     def get_scaling(self):
-        if self.binding is None:
-            return self.scaling_activation(self._scaling)
-        else:
-            # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
-            if self.face_scaling is None:
-                self.select_mesh_by_timestep(0)
-
-            scaling = self.scaling_activation(self._scaling)
-            return scaling * self.face_scaling[self.binding]
+        return self.scaling_activation(self._scaling)
+        # if self.binding is None:
+        #     return self.scaling_activation(self._scaling)
+        # else:
+        #     # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        #     if self.face_scaling is None:
+        #         self.select_mesh_by_timestep(0)
+        #
+        #     scaling = self.scaling_activation(self._scaling)
+        #     return scaling * self.face_scaling[self.binding]
     
     @property
     def get_rotation(self):
-        if self.binding is None:
-            return self.rotation_activation(self._rotation)
-        else:
-            # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
-            if self.face_orien_quat is None:
-                self.select_mesh_by_timestep(0)
-
-            # always need to normalize the rotation quaternions before chaining them
-            rot = self.rotation_activation(self._rotation)
-            face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
-            return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(face_orien_quat), quat_wxyz_to_xyzw(rot)))  # roma
-            # return quaternion_multiply(face_orien_quat, rot)  # pytorch3d
+        return self.rotation_activation(self._rotation)
+        # if self.binding is None:
+        #     return self.rotation_activation(self._rotation)
+        # else:
+        #     # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        #     if self.face_orien_quat is None:
+        #         self.select_mesh_by_timestep(0)
+        #
+        #     # always need to normalize the rotation quaternions before chaining them
+        #     rot = self.rotation_activation(self._rotation)
+        #     face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
+        #     return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(face_orien_quat), quat_wxyz_to_xyzw(rot)))  # roma
+        #     # return quaternion_multiply(face_orien_quat, rot)  # pytorch3d
     
     @property
     def get_xyz(self):
-        if self.binding is None:
-            return self._xyz
-        else:
-            # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
-            if self.face_center is None:
-                self.select_mesh_by_timestep(0)
-            
-            xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
-            return xyz * self.face_scaling[self.binding] + self.face_center[self.binding]
+        return self._xyz
+        # if self.binding is None:
+        #     return self._xyz
+        # else:
+        #     # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        #     if self.face_center is None:
+        #         self.select_mesh_by_timestep(0)
+        #
+        #     xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
+        #     return xyz * self.face_scaling[self.binding] + self.face_center[self.binding]
 
     @property
     def get_features(self):
@@ -161,9 +169,7 @@ class GaussianModel:
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
-    
-    def select_mesh_by_timestep(self, timestep):
-        raise NotImplementedError
+
 
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
@@ -187,11 +193,12 @@ class GaussianModel:
         self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
         print("Number of points at initialisation: ", self.get_xyz.shape[0])
 
-        if self.binding is None:
-            dist2 = torch.clamp_min(distCUDA2(self.get_xyz), 0.0000001)
-            scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
-        else:
-            scales = torch.log(torch.ones((self.get_xyz.shape[0], 3), device="cuda"))
+        # if self.binding is None:
+        #     dist2 = torch.clamp_min(distCUDA2(self.get_xyz), 0.0000001)
+        #     scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        # else:
+        #     scales = torch.log(torch.ones((self.get_xyz.shape[0], 3), device="cuda"))
+        scales = torch.log(torch.ones((self.get_xyz.shape[0], 3), device="cuda"))
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
@@ -245,9 +252,9 @@ class GaussianModel:
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
-        if self.binding is not None:
-            for i in range(1):
-                l.append('binding_{}'.format(i))
+        # if self.binding is not None:
+        #     for i in range(1):
+        #         l.append('binding_{}'.format(i))
         return l
 
     def save_ply(self, path):
@@ -266,9 +273,9 @@ class GaussianModel:
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
         attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation), axis=1)
 
-        if self.binding is not None:
-            binding = self.binding.detach().cpu().numpy()
-            attributes = np.concatenate((attributes, binding[:, None]), axis=1)
+        # if self.binding is not None:
+        #     binding = self.binding.detach().cpu().numpy()
+        #     attributes = np.concatenate((attributes, binding[:, None]), axis=1)
 
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
@@ -369,13 +376,13 @@ class GaussianModel:
         return optimizable_tensors
 
     def prune_points(self, mask):
-        if self.binding is not None:
-            # make sure each face is bound to at least one point after pruning
-            binding_to_prune = self.binding[mask]
-            counter_prune = torch.zeros_like(self.binding_counter)
-            counter_prune.scatter_add_(0, binding_to_prune, torch.ones_like(binding_to_prune, dtype=torch.int32, device="cuda"))
-            mask_redundant = (self.binding_counter - counter_prune) > 0
-            mask[mask.clone()] = mask_redundant[binding_to_prune]
+        # if self.binding is not None:
+        #     # make sure each face is bound to at least one point after pruning
+        #     binding_to_prune = self.binding[mask]
+        #     counter_prune = torch.zeros_like(self.binding_counter)
+        #     counter_prune.scatter_add_(0, binding_to_prune, torch.ones_like(binding_to_prune, dtype=torch.int32, device="cuda"))
+        #     mask_redundant = (self.binding_counter - counter_prune) > 0
+        #     mask[mask.clone()] = mask_redundant[binding_to_prune]
 
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
@@ -394,8 +401,10 @@ class GaussianModel:
 
         if self.binding is not None:
             # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
-            self.binding_counter.scatter_add_(0, self.binding[mask], -torch.ones_like(self.binding[mask], dtype=torch.int32, device="cuda"))
+            # self.binding_counter.scatter_add_(0, self.binding[mask], -torch.ones_like(self.binding[mask], dtype=torch.int32, device="cuda"))
             self.binding = self.binding[valid_points_mask]
+        if self.init_position is not None:
+            self.init_position = self.init_position[valid_points_mask]
 
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
@@ -457,22 +466,28 @@ class GaussianModel:
         samples = torch.normal(mean=means, std=stds)
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self._xyz[selected_pts_mask].repeat(N, 1)
-        if self.binding is not None:
-            selected_scaling = self.get_scaling[selected_pts_mask]
-            face_scaling = self.face_scaling[self.binding[selected_pts_mask]]
-            new_scaling = self.scaling_inverse_activation((selected_scaling / face_scaling).repeat(N,1) / (0.8*N))
-        else:
-            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        # if self.binding is not None:
+        #     selected_scaling = self.get_scaling[selected_pts_mask]
+        #     face_scaling = self.face_scaling[self.binding[selected_pts_mask]]
+        #     new_scaling = self.scaling_inverse_activation((selected_scaling / face_scaling).repeat(N,1) / (0.8*N))
+        # else:
+        #     new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N, 1) / (0.8 * N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N,1,1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N,1,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
+        # if self.binding is not None:
+        #     # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        #     new_binding = self.binding[selected_pts_mask].repeat(N)
+        #     self.binding = torch.cat((self.binding, new_binding))
+        #     self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
         if self.binding is not None:
-            # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
             new_binding = self.binding[selected_pts_mask].repeat(N)
             self.binding = torch.cat((self.binding, new_binding))
-            self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
-
+        if self.init_position is not None:
+            new_position = self.init_position[selected_pts_mask].repeat(N,1)
+            self.init_position = torch.cat((self.init_position, new_position))
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
@@ -490,18 +505,24 @@ class GaussianModel:
         new_opacities = self._opacity[selected_pts_mask]
         new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
+        # if self.binding is not None:
+        #     # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
+        #     new_binding = self.binding[selected_pts_mask]
+        #     self.binding = torch.cat((self.binding, new_binding))
+        #     self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
         if self.binding is not None:
-            # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
             new_binding = self.binding[selected_pts_mask]
             self.binding = torch.cat((self.binding, new_binding))
-            self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
-        
+        if self.init_position is not None:
+            new_position = self.init_position[selected_pts_mask]
+            self.init_position = torch.cat((self.init_position, new_position))
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
         grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
-
+        # print(self.binding.shape)
+        # print(self.get_xyz.shape)
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent)
 
